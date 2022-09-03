@@ -293,6 +293,7 @@ def create_price_and_description_df():
         )
 
 
+
 # helper function to create dataframe for last month's data from excel
 def create_lm_df():
     try:
@@ -326,6 +327,8 @@ def create_initial_analysis(dic, date):
     initial_combined_df = pd.merge(
         df_monthly_data, df_lm, how="outer", on="Lx_Type_Code",
     )
+    #TODO figure out a way where this can process without having to do a bunch of manual stuff on the backend! 
+    #initial_combined_df.to_excel(Path.cwd().joinpath('5_output_files', 'initial_combined.xlsx'))
     # combine the dataframes so price and description is in monthly data
     combined_df = pd.merge(
         initial_combined_df, df_price_desc, how="outer", on="Lx_Type_Code", indicator=True
