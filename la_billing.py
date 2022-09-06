@@ -156,12 +156,10 @@ def add_additional_invoice_items(date, file_path):
     df = pd.read_csv(file_path, index_col="Customer_File_Name",usecols=[0,1,2]).dropna(thresh=2)
     customer_name_dict = create_cust_name_dict()
     clients = []
-    memos = []
     descriptions = []
     lx_type_codes = []
     quantities = []
     dates = []
-    external_ids = []
 
     for ind in df.index:
         #TODO this doesn't work if client has more than one line item because new_data would need to be iterated over
@@ -172,12 +170,7 @@ def add_additional_invoice_items(date, file_path):
         except KeyError:
             client = ind
         clients.append(client)
-        memos.append("Lease Admin Services")
         dates.append(date)
-        ext_id = client[:5] + date[-2:] + date[:2]
-        external_ids.append(ext_id.replace(" ", "_")
-                            .replace(",", "_")
-                            .replace(".", "_"))
         for k, v in new_data.items():
             if k == "Description":
                 descriptions.append(v)
@@ -185,20 +178,16 @@ def add_additional_invoice_items(date, file_path):
             elif k == "Quantity":
                 quantities.append(v)
     
-    print(clients)
-    return external_ids, clients, dates, memos, lx_type_codes, quantities, descriptions
+    return clients, dates, lx_type_codes, quantities, descriptions
 
 def process_files_and_create_dict(directory, addl_invoice_items, date):
     customer_name_dict = create_cust_name_dict()
     # build lists for dictionary items
-    clients = addl_invoice_items[1]
-    print(clients)
-    memos = addl_invoice_items[3]
-    descriptions = addl_invoice_items[6]
-    lx_type_codes = addl_invoice_items[4]
-    quantities = addl_invoice_items[5]
-    dates = addl_invoice_items[2]
-    external_ids = addl_invoice_items[0]
+    clients = addl_invoice_items[0]
+    descriptions = addl_invoice_items[4]
+    lx_type_codes = addl_invoice_items[2]
+    quantities = addl_invoice_items[3]
+    dates = addl_invoice_items[1]
     # blank dictionary
     results_dict = {}
 
@@ -229,51 +218,35 @@ def process_files_and_create_dict(directory, addl_invoice_items, date):
                         for key, value in data.value_counts().items():
                             if key[1] == "North America":
                                 clients.append(client_name)
-                                memos.append("Lease Admin Services")
                                 descriptions.append(f"{key[0]} - Domestic")
                                 lx_type_codes.append(
                                     f"{client_name}_{key[0]} - Domestic"
                                 )
                                 quantities.append(value)
                                 dates.append(date)
-                                external_ids.append(
-                                    client_name[:5] + date[-2:] + date[:2]
-                                )
                             else:
                                 clients.append(client_name)
-                                memos.append("Lease Admin Services")
                                 descriptions.append(f"{key[0]} - International")
                                 lx_type_codes.append(
                                     f"{client_name}_{key[0]} - International - {key[1]}"
                                 )
                                 quantities.append(value)
                                 dates.append(date)
-                                external_ids.append(
-                                    client_name[:5] + date[-2:] + date[:2]
-                                )
                     else:
                         data = df.loc[:, "Lease Status"]
                         for key, value in data.value_counts().items():
                             clients.append(client_name)
-                            memos.append("Lease Admin Services")
                             descriptions.append(key)
                             lx_type_codes.append(f"{client_name}_{key}")
                             quantities.append(value)
                             dates.append(date)
-                            ext_id = client_name[:5] + date[-2:] + date[:2]
-                            external_ids.append(
-                                ext_id.replace(" ", "_")
-                                .replace(",", "_")
-                                .replace(".", "_")
-                            )
+                            
                 # throw error if file is not processsed (i.e., doesn't have "Lease Status" column)
                 except KeyError:
                     print(f"ERROR! {file.name} was not processed or had no data")
     
-    results_dict["External_ID"] = external_ids
     results_dict["Customer"] = clients
     results_dict["Date"] = dates
-    results_dict["Memo"] = memos
     results_dict["Lx_Type"] = descriptions
     results_dict["Lx_Type_Code"] = lx_type_codes
     results_dict["Quantity"] = quantities
@@ -341,26 +314,24 @@ def create_initial_analysis(dic, date):
     # create total and difference columns vs lm
     total = combined_df["Quantity"] * combined_df["Price"]
     lm_total = combined_df["LM_Price"] * combined_df["LM_Quantity"]
-    combined_df.insert(10, "Total", total)
-    combined_df.insert(12, "LM_Total", lm_total)
+    combined_df.insert(0, "Total", total)
+    combined_df.insert(1, "LM_Total", lm_total)
     # if there is no quantity this month, this calc won't work
 
     qnty_vs_lm = combined_df["Quantity"] - combined_df["LM_Quantity"]
     price_vs_lm = combined_df["Price"] - combined_df["LM_Price"]
     total_vs_lm = combined_df["Total"] - combined_df["LM_Total"]
 
-    combined_df.insert(13, "Qnty_vs_LM", qnty_vs_lm)
-    combined_df.insert(14, "Price_vs_LM", price_vs_lm)
-    combined_df.insert(15, "Total_vs_LM", total_vs_lm)
+    combined_df.insert(2, "Qnty_vs_LM", qnty_vs_lm)
+    combined_df.insert(3, "Price_vs_LM", price_vs_lm)
+    combined_df.insert(4, "Total_vs_LM", total_vs_lm)
     
     # sort columns in better order
     col_order = [
-        "External_ID",
         "Date",
         "Customer",
         "Lx_Type",
         "Lx_Type_Code",
-        "Memo",
         "Invoice_Description",
         "Quantity",
         "Price",
