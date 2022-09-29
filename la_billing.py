@@ -28,6 +28,7 @@ def main():
         date = get_date("Enter the monthend date in MM/DD/YY format: ")
         add_data = add_additional_invoice_items(date, Path.cwd().joinpath("4_input_files", "additional_invoice_items.csv"))
         results = process_files_and_create_dict("2_lease_files", add_data, date)
+        #create_lm_df() # remove after testing
         create_initial_analysis(results, date)
     if process == 4:
         date = get_date("Enter the monthend date in MM/DD/YY format: ")
@@ -70,7 +71,6 @@ def check_dir_structure(paths):
             sys.exit(
                 f"ERROR: The {folder} folder does not exist. Please add one as a subfolder in the Lease_Admin folder."
             )
-
 
 
 def rename_and_move_files(directory, target_dir):
@@ -149,7 +149,6 @@ def create_cust_name_dict():
         sys.exit("customer_names.csv file must be in input_files directory")
 
 
-
 # Helper function to create lists to add lease abstracts and other items TODO: use excel file instead?
 def add_additional_invoice_items(date, file_path):
     # Read file and create df
@@ -164,7 +163,7 @@ def add_additional_invoice_items(date, file_path):
     for ind in df.index:
         #TODO this doesn't work if client has more than one line item because new_data would need to be iterated over
         new_data = df.loc[ind]
-        print(new_data)
+        #print(new_data)
         try:
             client = customer_name_dict[ind]
         except KeyError:
@@ -180,17 +179,18 @@ def add_additional_invoice_items(date, file_path):
     
     return clients, dates, lx_type_codes, quantities, descriptions
 
+
 def process_files_and_create_dict(directory, addl_invoice_items, date):
     customer_name_dict = create_cust_name_dict()
-    # build lists for dictionary items
+    # build lists from additional_invoice_items()  for dictionary items
     clients = addl_invoice_items[0]
     descriptions = addl_invoice_items[4]
     lx_type_codes = addl_invoice_items[2]
     quantities = addl_invoice_items[3]
     dates = addl_invoice_items[1]
-    # blank dictionary
+    # blank dictionary for return
     results_dict = {}
-
+    # create rest of results from processed lease count files (TODO: move to separate function)
     for file in os.scandir(directory):
         if file.name.split(".")[1] == "xlsx":
             try:
@@ -209,12 +209,12 @@ def process_files_and_create_dict(directory, addl_invoice_items, date):
 
             # exclude original express file
             if file.name != "express.xlsx":
-                # read files and poplulate lists
+                # read files and populate lists
                 df = pd.read_excel(file, header=header)
                 try:
-                    # need to distinguish between domestic and international for Tory
+                    # distinguish between domestic and international for Tory
                     if file.name == "tory.xlsx":
-                        data = df.loc[:, ["Lease Status", "Region"]]
+                        data = df.loc[:, ["Lease Status", "Region"]] # do I need the ':,' here?
                         for key, value in data.value_counts().items():
                             if key[1] == "North America":
                                 clients.append(client_name)
@@ -266,7 +266,6 @@ def create_price_and_description_df():
         )
 
 
-
 # helper function to create dataframe for last month's data from excel
 def create_lm_df():
     try:
@@ -275,53 +274,48 @@ def create_lm_df():
             Path.cwd().joinpath("4_input_files", "lm_invoice_analysis.xlsx"),
             usecols=["Lx_Type_Code", "Quantity", "Price"],
         )
-        # rename columns
-        df.columns = ["Lx_Type_Code", "LM_Quantity", "LM_Price"]
-        # get rid of rows without quantity
-        df = df[df["LM_Quantity"] != 0]
-
-        return df
-
     except FileNotFoundError:
         print(
             "A file named 'lm_invoice_analysis.xlsx' must be in the input files directory"
         )
-
+    else:
+        # rename columns
+        df.columns = ["Lx_Type_Code", "LM_Quantity", "LM_Price"]
+        # get rid of rows without quantity
+        df = df.fillna(0)
+        df = df[df["LM_Quantity"] > 0]
+        
+        return df
 
 def create_initial_analysis(dic, date):
     # create df with monthly invoice data
     df_monthly_data = pd.DataFrame.from_dict(dic)
+    #df_monthly_data.to_excel("5_output_files/TMDF.xlsx")
     # rename price and description dataframe
     df_price_desc = create_price_and_description_df()
     
     # create df with last month's data
     df_lm = create_lm_df()
-    #df_lm.to_excel(Path.cwd().joinpath('5_output_files', 'lm.xlsx'))
+    
     initial_combined_df = pd.merge(
         df_monthly_data, df_lm, how="outer", on="Lx_Type_Code",
     )
-    #TODO figure out a way where this can process without having to do a bunch of manual stuff on the backend! 
     #initial_combined_df.to_excel(Path.cwd().joinpath('5_output_files', 'initial_combined.xlsx'))
-    # combine the dataframes so price and description is in monthly data
-    combined_df = pd.merge(
-        initial_combined_df, df_price_desc, how="outer", on="Lx_Type_Code", indicator=True
-    )
-    # eliminate unnecessary rows TODO
-    #combined_df = combined_df.loc[(combined_df["Quantity"]) != 0 & (combined_df["LM_Quantity"] != 0)  ]
-    # sort rows
-    combined_df.sort_values(["Lx_Type_Code", "Invoice_Description"], inplace=True)
     
+    combined_df = pd.merge(
+        initial_combined_df, df_price_desc, how="left", on="Lx_Type_Code")
+    # sort rows
+    combined_df = combined_df.sort_values(["Lx_Type_Code", "Invoice_Description"])
+    # make NaN values zero for calcs
+    combined_df[["Price", "Quantity", "LM_Quantity", "LM_Price"]] = combined_df[["Price", "Quantity", "LM_Quantity", "LM_Price"]].fillna(value=0)
     # create total and difference columns vs lm
     total = combined_df["Quantity"] * combined_df["Price"]
     lm_total = combined_df["LM_Price"] * combined_df["LM_Quantity"]
     combined_df.insert(0, "Total", total)
     combined_df.insert(1, "LM_Total", lm_total)
-    # if there is no quantity this month, this calc won't work
-
     qnty_vs_lm = combined_df["Quantity"] - combined_df["LM_Quantity"]
     price_vs_lm = combined_df["Price"] - combined_df["LM_Price"]
     total_vs_lm = combined_df["Total"] - combined_df["LM_Total"]
-
     combined_df.insert(2, "Qnty_vs_LM", qnty_vs_lm)
     combined_df.insert(3, "Price_vs_LM", price_vs_lm)
     combined_df.insert(4, "Total_vs_LM", total_vs_lm)
@@ -342,7 +336,6 @@ def create_initial_analysis(dic, date):
         "Qnty_vs_LM",
         "Price_vs_LM",
         "Total_vs_LM",
-        "_merge"
     ]
     combined_df = combined_df[col_order]
     # total numeric columns
@@ -351,9 +344,8 @@ def create_initial_analysis(dic, date):
     # create a name to save the file under
     month, _, year = date.split("/")
     save_file_path = Path.cwd().joinpath("5_output_files", f"{month}{year}_initial_invoice_analysis.xlsx")
-    combined_df.to_excel(save_file_path)
+    combined_df.to_excel(save_file_path, index=False)
     
-    print(combined_df.iloc[1,1])
     print(f"initial analysis file for {date} created")
     return save_file_path
 
