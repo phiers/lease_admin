@@ -4,16 +4,37 @@ import pandas as pd
 from openpyxl import load_workbook
 import os
 import sys
+from datetime import datetime, timedelta
+from calendar import monthrange
 
 
 def main():
     process = start_program()
-    # 5: TODO save analysis (after altering) to new file in inputs (for next month)
-    # 4: TODO Create csv file (from analysis, so any edits can be reflected)
+    run_process(process)
+
+
+def start_program():
+    while True:
+        try:
+            process = input(
+                """What would you like to do?
+            1 - Process Lucernex files
+            2 - Create initial analysis file
+            3 - Create final analysis file
+            4 - Create csv file
+            5 - Archive this month's files
+            6 - Exit this program
+                 \n Enter the appropriate number: """
+            )
+            if int(process) in [1, 2, 3, 4, 5, 6]:
+                return int(process)
+        except:
+            print("\nENTER A NUMBER BETWEEN 1 AND 6! \n")
+            continue
+    
+
+def run_process(process):  
     if process == 1:
-        print("INSTRUCTIONS:  .....")  # TODO
-        sys.exit()
-    if process == 2:
         directories = [
             "1_Lx_files",
             "2_lease_files",
@@ -24,44 +45,24 @@ def main():
         check_dir_structure(directories)
         rename_and_move_files("1_Lx_files", "2_lease_files")
         create_separate_homage_and_express_file("2_lease_files", "express.xlsx")
-    if process == 3:
-        date = get_date("Enter the monthend date in MM/DD/YY format: ")
+    if process == 2:
+        date = get_date()
         add_data = add_additional_invoice_items(date, Path.cwd().joinpath("4_input_files", "additional_invoice_items.csv"))
         results = process_files_and_create_dict("2_lease_files", add_data, date)
         #create_lm_df() # remove after testing
         create_initial_analysis(results, date)
-    if process == 4:
-        date = get_date("Enter the monthend date in MM/DD/YY format: ")
+    if process == 3:
+        date = get_date()
         m, _, y = date.split("/")
-        path = Path.cwd().joinpath('5_output_files', f'{m}{y}_initial_invoice_analysis.xlsx')
+        path = Path.cwd().joinpath('5_output_files', f'{m}_{y}_initial_invoice_analysis.xlsx')
         create_final_analysis_files(path, date)
-    if process == 5:
+    if process == 4:
+        create_csv_from_analysis_file("5_output_files/09_2022_final_invoice_analysis.xlsx")
         # TODO: create csv file from final analysis file
+    if process == 5:
         save_lm_analysis_file_to_input_dir()
     if process == 6:
         sys.exit()
-
-
-def start_program():
-    while True:
-        try:
-            process = input(
-                """What would you like to do?
-            1 - Get instructions
-            2 - Process Lucernex files
-            3 - Create initial analysis file
-            4 - Create final analysis file
-            5 - Create csv file and archive this month's files
-            6 - Exit this program
-                 \n Enter the appropriate number: """
-            )
-            if int(process) in [1, 2, 3, 4, 5, 6]:
-                return int(process)
-            else:
-                print("\nENTER A NUMBER BETWEEN 1 AND 6! \n")
-        except:
-            continue
-
 
 def check_dir_structure(paths):
     for path in paths:
@@ -126,15 +127,23 @@ def create_separate_homage_and_express_file(dir, file):
 
 
 # Helper function to get user input for date
-def get_date(query_str):
-    while True:
-        try:
-            date = input(query_str)
-            # test to make sure user entered correctly
-            _, _, _ = date.split("/")
-            return date
-        except ValueError:
-            continue
+def get_date():
+        """returns a tuple (previous monthend date, previous period)"""
+        #t = datetime(2023, 1, 4) #line used to test case where current month is January (i.e, 1)
+        t = datetime.today().date() + timedelta(days=5)
+        if t.month != 1:
+            prev_month = t.month - 1
+            year = t.year
+        else:
+            # if month is January, make previous month December
+            prev_month = 12
+            year = t.year - 1
+        # get max days in each month
+        days = monthrange(t.year, prev_month)[1]
+        # format months 1 thru 9 to include leading zero
+        if prev_month < 10: prev_month = f"0{prev_month}"
+        
+        return f"{prev_month}/{days}/{year}"
 
 
 # Helper function to create customer names dictionary (file names xref to NS names)
@@ -258,7 +267,8 @@ def process_files_and_create_dict(directory, addl_invoice_items, date):
 def create_price_and_description_df():
     try:
         return pd.read_csv(
-            Path.cwd().joinpath("4_input_files", "type_desc_price_matrix.csv")
+            Path.cwd().joinpath("4_input_files", "type_desc_price_matrix.csv"),
+            #usecols=[0,1,2]
         )
     except FileNotFoundError:
         print(
@@ -284,6 +294,8 @@ def create_lm_df():
         # get rid of rows without quantity
         df = df.fillna(0)
         df = df[df["LM_Quantity"] > 0]
+        # drop totals row
+        df = df[:-1]
         
         return df
 
@@ -293,10 +305,10 @@ def create_initial_analysis(dic, date):
     #df_monthly_data.to_excel("5_output_files/TMDF.xlsx")
     # rename price and description dataframe
     df_price_desc = create_price_and_description_df()
-    
+    df_price_desc.to_excel("5_output_files/price_descr.xlsx")
     # create df with last month's data
     df_lm = create_lm_df()
-    
+    #df_lm.to_excel("5_output_files/LMDF.xlsx")
     initial_combined_df = pd.merge(
         df_monthly_data, df_lm, how="outer", on="Lx_Type_Code",
     )
@@ -343,16 +355,15 @@ def create_initial_analysis(dic, date):
     combined_df.loc["Totals"]= combined_df.loc[:, columns_to_total].sum(axis=0)
     # create a name to save the file under
     month, _, year = date.split("/")
-    save_file_path = Path.cwd().joinpath("5_output_files", f"{month}{year}_initial_invoice_analysis.xlsx")
+    save_file_path = Path.cwd().joinpath("5_output_files", f"{month}_{year}_initial_invoice_analysis.xlsx")
     combined_df.to_excel(save_file_path, index=False)
     
     print(f"initial analysis file for {date} created")
-    return save_file_path
 
 
 def create_final_analysis_files(file_path, date):
-    combined_df = pd.read_excel(file_path).round(2)
-    sum_df = combined_df.groupby(["Customer", "Invoice_Description"]).agg(
+    initial_df = pd.read_excel(file_path).round(2)
+    sum_df = initial_df.groupby(["Customer", "Invoice_Description"]).agg(
         {
             "Quantity": "sum",
             "Price": "mean",
@@ -364,24 +375,25 @@ def create_final_analysis_files(file_path, date):
             "Price_vs_LM": "sum",
             "Total_vs_LM": "sum",
         }
-    ).round(2)
+    ).round(2).reset_index()
 
-    cust_sum_df = sum_df.groupby("Customer").agg({"Total": "sum", "LM_Total": "sum", "Total_vs_LM": "sum"}).round(2)
+    cust_sum_df = sum_df.groupby("Customer").agg({"Total": "sum", "LM_Total": "sum", "Total_vs_LM": "sum"}).round(2).reset_index()
     # add totals to columns
-    cust_sum_df.loc["Totals"]= cust_sum_df.sum(axis=0)
-    sum_df.loc["Totals", :]= sum_df.sum(axis=0).values
+    cust_sum_df.loc["Totals"] = cust_sum_df.sum(axis=0, numeric_only=True)
+    sum_df.loc["Totals"] = sum_df.sum(axis=0, numeric_only=True)
 
     m, _, y = date.split("/")
-    save_file_name = f"{m}{y}_final_analysis file.xlsx"
+    save_file_name = f"{m}_{y}_final_invoice_analysis.xlsx"
     # write to excel as three separate sheets
     with pd.ExcelWriter(
         Path.cwd().joinpath("5_output_files", save_file_name)
     ) as writer:
-        cust_sum_df.to_excel(writer, sheet_name="cust_summary")
-        sum_df.to_excel(writer, sheet_name="summary")
-        combined_df.to_excel(
+        cust_sum_df.to_excel(writer, sheet_name="cust_summary", index=False)
+        sum_df.to_excel(writer, sheet_name="summary", index=False)
+        initial_df.to_excel(
             writer,
             sheet_name="detail",
+            index=False
         )
     
     print("Final analysis files created")
@@ -401,15 +413,22 @@ def save_lm_analysis_file_to_input_dir():
 
 
 def create_csv_from_analysis_file(f):
-    """df = pd.DataFrame.from_dict(d)
-    # sort rows
-    df.sort_values(["Customer", "Lx_Type"], inplace=True)
-    #  sort columns in necessary order
-    df.loc[:, ["External_ID", "Customer", "Date", "Memo", "Lx_Type", "Quantity"]]
-    # set index to External_ID
-    df.set_index("External_ID", inplace=True)
-    df.to_csv(Path.cwd().joinpath("output_files", "results.csv"))
-    print("CSV file created")"""
+    full_date = get_date()
+    month, _, year = full_date.split("/")
+    df = pd.read_excel(f, sheet_name=1, usecols=["Customer", "Invoice_Description", "Quantity", "Price"])
+    cust_str = df["Customer"].str.replace(" ", "_")
+    cust_str = cust_str.replace(",", "_").replace(".", "_").str[0:5]
+    ext_id = year[2:] + month + cust_str
+    df.insert(0, "External ID", ext_id)
+    df.insert(1, "Date", full_date)
+    df.insert(4, "Memo", "Lease Admin Services")
+    df = df[:-1]
+    df = df[df["Quantity"] != 0]
+    
+    
+    df.to_csv(f"5_output_files/{month}{year[2:]}_invoice_upload.csv", index=False)
+    
+    
 
 
 if __name__ == "__main__":
