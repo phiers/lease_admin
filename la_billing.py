@@ -62,8 +62,10 @@ def run_process(process):
         )
         create_final_analysis_files(path, date)
     if process == 4:
+        date = get_date()
+        m, _, y = date.split("/")
         create_csv_from_analysis_file(
-            "5_output_files/09_2022_final_invoice_analysis.xlsx"
+            f"5_output_files/{m}_{y}_final_invoice_analysis.xlsx"
         )
     if process == 5:
         archive_files()
@@ -102,7 +104,7 @@ def rename_and_move_files(directory, target_dir):
                     wb.save(Path.cwd().joinpath(target_dir, "townshoes.xlsx"))
                     lease_file_count += 1
                 # Handle case where DSW Project count gets copied into emailed files (do nothing)
-                elif "Project" in sheet_identifier_list:
+                elif "Projects" in sheet_identifier_list:
                     print(f"{file.name} is not a lease listing and was not processed")
                     continue
                 else:
@@ -226,10 +228,10 @@ def process_files_and_create_dict(directory, addl_invoice_items, date):
                 df = pd.read_excel(file, header=header)
                 try:
                     # distinguish between domestic and international for Tory
-                    if file.name == "tory.xlsx":
+                    if file.name == "tory.xlsx" or file.name == "asics.xlsx":
                         data = df.loc[:, ["Lease Status", "Region"]]
                         for key, value in data.value_counts().items():
-                            if key[1] == "North America":
+                            if key[1] == "North America" or key[1] == "United States":
                                 clients.append(client_name)
                                 descriptions.append(f"{key[0]} - Domestic")
                                 lx_type_codes.append(
@@ -263,7 +265,7 @@ def process_files_and_create_dict(directory, addl_invoice_items, date):
     results_dict["Lx_Type"] = descriptions
     results_dict["Lx_Type_Code"] = lx_type_codes
     results_dict["Quantity"] = quantities
-
+    
     return results_dict
 
 
@@ -271,7 +273,7 @@ def create_price_and_description_df():
     """Creates dataframe dataframe with prices and descriptions from type_desc_price_matrix.csv"""
     try:
         return pd.read_csv(
-            Path.cwd().joinpath("4_input_files", "type_desc_price_matrix.csv")
+            Path.cwd().joinpath("4_input_files", "type_desc_price_matrix.csv"), usecols=[0, 1, 2]
         )
     except FileNotFoundError:
         print(
@@ -323,6 +325,7 @@ def create_initial_analysis(dic, date):
     )
     # sort rows
     combined_df = combined_df.sort_values(["Lx_Type_Code", "Invoice_Description"])
+
     # make NaN values zero for calcs
     combined_df[["Price", "Quantity", "LM_Quantity", "LM_Price"]] = combined_df[
         ["Price", "Quantity", "LM_Quantity", "LM_Price"]
@@ -426,7 +429,7 @@ def create_csv_from_analysis_file(f):
     month, _, year = full_date.split("/")
     df = pd.read_excel(
         f,
-        sheet_name=1,
+        sheet_name="summary",
         usecols=["Customer", "Invoice_Description", "Quantity", "Price"],
     )
     cust_str = df["Customer"].str.replace(" ", "_")
