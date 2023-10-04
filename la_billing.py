@@ -46,7 +46,7 @@ def run_process(process):
         ]
         check_dir_structure(directories)
         rename_and_move_files("1_Lx_files", "2_lease_files")
-        create_separate_homage_and_express_file("2_lease_files", "express.xlsx")
+        separate_express_file("2_lease_files", "express.xlsx")
     if process == 2:
         date = get_date()
         add_data = process_additional_invoice_items(
@@ -122,16 +122,19 @@ def rename_and_move_files(directory, target_dir):
         )
 
 
-def create_separate_homage_and_express_file(dir, file):
-    """Separate homage and express (both in express file when sent from Lucernex)"""
+def separate_express_file(dir, file):
+    """Separate homage, bonobos and express (all in express file when sent from Lucernex)"""
     df = pd.read_excel(Path.cwd().joinpath(dir, file), header=1)
     cols = df.columns
     # find homage leases and make new file
     df_homage = df[df["Contract Name"].str.startswith("Hom")]
     df_homage.to_excel(Path.cwd().joinpath(dir, "homage.xlsx"), columns=cols)
-
+    # find Bonobos leases and make new file
+    df_bonobos = df[df["Contract ID"].str.startswith("05")]
+    df_bonobos.to_excel(Path.cwd().joinpath(dir, "bonobos.xlsx"), columns=cols)
     # remove homage from df and save separate express file
-    df_express = df[~df["Contract Name"].str.startswith("Hom")]
+    df = df[~df["Contract Name"].str.startswith("Hom")]
+    df_express = df[~df["Contract ID"].str.startswith("05")]
     df_express.to_excel(Path.cwd().joinpath(dir, "express_only.xlsx"), columns=cols)
 
 
@@ -217,9 +220,9 @@ def process_files_and_create_dict(directory, addl_invoice_items, date):
                         f"ERROR! The customer name does not exist on customer_names.csv for {file.name}. If the name is not added, this file will not be processed."
                     )
 
-            # the files created for express and homage start at row 0, not 1
+            # the files created for express, bonobos & homage start at row 0, not 1
             header = 1
-            if file.name == "homage.xlsx" or file.name == "express_only.xlsx":
+            if file.name == "homage.xlsx" or file.name == "express_only.xlsx" or file.name == "bonobos.xlsx":
                 header = 0
 
             # exclude original express file
