@@ -273,10 +273,10 @@ def process_files_and_create_dict(directory, addl_invoice_items, date):
 
 
 def create_price_and_description_df():
-    """Creates dataframe dataframe with prices and descriptions from type_desc_price_matrix.csv"""
+    """Creates dataframe dataframe with prices and descriptions from type_desc_price_matrix.xlsx"""
     try:
-        return pd.read_csv(
-            Path.cwd().joinpath("4_input_files", "type_desc_price_matrix.csv"), usecols=[0, 1, 2]
+        return pd.read_excel(
+            Path.cwd().joinpath("4_input_files", "type_desc_price_matrix.xlsx"), usecols=[0, 1, 2]
         )
     except FileNotFoundError:
         print(
