@@ -47,6 +47,7 @@ def run_process(process):
         check_dir_structure(directories)
         rename_and_move_files("1_Lx_files", "2_lease_files")
         separate_express_file("2_lease_files", "express.xlsx")
+        separate_hatch_file("2_lease_files", "janieandjack.xlsx")
     if process == 2:
         date = get_date()
         add_data = process_additional_invoice_items(
@@ -136,6 +137,22 @@ def separate_express_file(dir, file):
     df = df[~df["Contract Name"].str.startswith("Hom")]
     df_express = df[~df["Contract ID"].str.startswith("05")]
     df_express.to_excel(Path.cwd().joinpath(dir, "express_only.xlsx"), columns=cols)
+    # delete the original file
+    os.remove(f"{dir}/{file}")
+
+def separate_hatch_file(dir, file):
+    """Separate hatch from janie and jack file"""
+    df = pd.read_excel(Path.cwd().joinpath(dir, file), header=1)
+    cols = df.columns
+    # find hatch leases and make new file
+    df_hatch = df[df["Contract ID"].astype(str).str.startswith(("5", "9"))]
+    df_hatch.to_excel(Path.cwd().joinpath(dir, "hatch.xlsx"), columns=cols)
+    # remove hatch from df and save separate janie and jack file
+    df = df[~df["Contract Name"].str.startswith("Hom")]
+    df_jnj = df[~df["Contract ID"].astype(str).str.startswith(("5", "9"))]
+    df_jnj.to_excel(Path.cwd().joinpath(dir, "janie_and_jack_only.xlsx"), columns=cols)
+    # delete the original file
+    os.remove(f"{dir}/{file}")
 
 
 def get_date():
@@ -214,54 +231,48 @@ def process_files_and_create_dict(directory, addl_invoice_items, date):
             try:
                 client_name = customer_name_dict[file.name.split(".")[0]]
             except KeyError:
-                # express file is split into homage and express_only, so exclude express from keys
-                if file.name != "express.xlsx":
-                    print(
-                        f"ERROR! The customer name does not exist on customer_names.csv for {file.name}. If the name is not added, this file will not be processed."
-                    )
+                print(
+                    f"ERROR! The customer name does not exist on customer_names.csv for {file.name}. If the name is not added, this file will not be processed."
+                )
 
-            # the files created for express, bonobos & homage start at row 0, not 1
-            header = 1
-            if file.name == "homage.xlsx" or file.name == "express_only.xlsx" or file.name == "bonobos.xlsx":
-                header = 0
-
-            # exclude original express file
-            if file.name != "express.xlsx":
-                # read files and populate lists
-                df = pd.read_excel(file, header=header)
-                try:
-                    # distinguish between domestic and international for Tory
-                    if file.name == "tory.xlsx" or file.name == "asics.xlsx":
-                        data = df.loc[:, ["Lease Status", "Region"]]
-                        for key, value in data.value_counts().items():
-                            if key[1] == "North America" or key[1] == "United States":
-                                clients.append(client_name)
-                                descriptions.append(f"{key[0]} - Domestic")
-                                lx_type_codes.append(
-                                    f"{client_name}_{key[0]} - Domestic"
-                                )
-                                quantities.append(value)
-                                dates.append(date)
-                            else:
-                                clients.append(client_name)
-                                descriptions.append(f"{key[0]} - International")
-                                lx_type_codes.append(
-                                    f"{client_name}_{key[0]} - International - {key[1]}"
-                                )
-                                quantities.append(value)
-                                dates.append(date)
-                    else:
-                        data = df.loc[:, "Lease Status"]
-                        for key, value in data.value_counts().items():
+            # the split files start at row 0, not 1
+            header = 0 if file.name in {"homage.xlsx", "express_only.xlsx", "bonobos.xlsx", "hatch.xlsx", "janie_and_jack_only.xlsx"} else 1
+            
+            df = pd.read_excel(file, header=header)
+            try:
+                # distinguish between domestic and international for Tory
+                if file.name == "tory.xlsx" or file.name == "asics.xlsx":
+                    data = df.loc[:, ["Lease Status", "Region"]]
+                    for key, value in data.value_counts().items():
+                        if key[1] == "North America" or key[1] == "United States":
                             clients.append(client_name)
-                            descriptions.append(key)
-                            lx_type_codes.append(f"{client_name}_{key}")
+                            descriptions.append(f"{key[0]} - Domestic")
+                            lx_type_codes.append(
+                                f"{client_name}_{key[0]} - Domestic"
+                            )
                             quantities.append(value)
                             dates.append(date)
+                        else:
+                            clients.append(client_name)
+                            descriptions.append(f"{key[0]} - International")
+                            lx_type_codes.append(
+                                f"{client_name}_{key[0]} - International - {key[1]}"
+                            )
+                            quantities.append(value)
+                            dates.append(date)
+                else:
+                    data = df.loc[:, "Lease Status"]
+                    for key, value in data.value_counts().items():
+                        clients.append(client_name)
+                        descriptions.append(key)
+                        lx_type_codes.append(f"{client_name}_{key}")
+                        quantities.append(value)
+                        dates.append(date)
 
-                # throw error if file is not processsed (i.e., doesn't have "Lease Status" column)
-                except KeyError:
-                    print(f"ERROR! {file.name} was not processed or had no data")
+            # throw error if file is not processsed (i.e., doesn't have "Lease Status" column)
+            except KeyError:
+                print(KeyError.with_traceback)
+                print(f"ERROR! {file.name} was not processed or had no data")
 
     results_dict["Customer"] = clients
     results_dict["Date"] = dates
