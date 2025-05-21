@@ -10,3 +10,4 @@ __archive
 .DS_Store
 todo.md
 *.xlsx
+.idea

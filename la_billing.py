@@ -23,14 +23,13 @@ def start_program():
             2 - Create initial analysis file
             3 - Create final analysis file
             4 - Create csv file
-            5 - Archive this month's files
-            6 - Exit this program
+            5 - Exit this program
                  \n Enter the appropriate number: """
             )
             if int(process) in [1, 2, 3, 4, 5, 6]:
                 return int(process)
         except:
-            print("\nENTER A NUMBER BETWEEN 1 AND 6! \n")
+            print("\nENTER A NUMBER BETWEEN 1 AND 5! \n")
             continue
 
 
@@ -69,8 +68,6 @@ def run_process(process):
             f"5_output_files/{m}_{y}_final_invoice_analysis.xlsx"
         )
     if process == 5:
-        archive_files()
-    if process == 6:
         sys.exit()
 
 
@@ -95,19 +92,6 @@ def rename_and_move_files(directory, target_dir):
                 if "Equipment" in sheet_identifier_list:
                     name = sheet_identifier_list[-1].split(".")[0] + "_equipment.xlsx"
                     wb.save(Path.cwd().joinpath("3_equip_files", name))
-                # Camuto and Town Shoes are on the dsw site, but come as separate files, so have to handle separately
-                elif "Camuto" in sheet_identifier_list:
-                    wb.save(Path.cwd().joinpath(target_dir, "camuto.xlsx"))
-                    lease_file_count += 1
-                elif (
-                    "Town" in sheet_identifier_list and "Shoes" in sheet_identifier_list
-                ):
-                    wb.save(Path.cwd().joinpath(target_dir, "townshoes.xlsx"))
-                    lease_file_count += 1
-                # Handle case where DSW Project count gets copied into emailed files (do nothing)
-                elif "Projects" in sheet_identifier_list:
-                    print(f"{file.name} is not a lease listing and was not processed")
-                    continue
                 else:
                     name = sheet_identifier_list[-1].split(".")[0] + ".xlsx"
                     wb.save(Path.cwd().joinpath(target_dir, name))
@@ -157,7 +141,6 @@ def separate_hatch_file(dir, file):
 
 def get_date():
     """returns previous monthend date in mm/dd/yyyy format"""
-    # t = datetime(2023, 1, 4) #line used to test case where current month is January (i.e, 1)
     t = datetime.today().date() + timedelta(days=5)
     if t.month != 1:
         prev_month = t.month - 1
@@ -176,7 +159,7 @@ def get_date():
 
 
 def create_cust_name_dict():
-    """Helper function to create customer names dictionary (file names xref to NS names)"""
+    """Helper function to create customer names dictionary (file names xref to NetSuite names)"""
     try:
         return (
             pd.read_csv("4_input_files/customer_names.csv", header=None, index_col=0)
@@ -455,42 +438,8 @@ def create_csv_from_analysis_file(f):
     df = df[:-1]
     df = df[df["Quantity"] != 0]
 
-    df.to_csv(f"5_output_files/{month}{year[2:]}_invoice_upload.csv", index=False)
-
-
-"""
-The last few functions clean up and archive the folders to get ready for next month:
-"""
-
-
-def archive_files():
-    """
-    TODO: move contents of folders 1 thru 3 to archive
-    TODO: copy contents of folder 4
-    save_lm_analysis_file_to_input_dir()
-    TODO: move contents of folder 5 to archive
-    """
-    # THIS DOESN'T WORK!!
-    shutil.move("1_Lx_files", "6_TM_Archive/1_Lx_files")
-    shutil.move("4_input_files/lm_invoice_analysis.xlsx", "6_TM_Archive/4_input_files")
-
-
-def save_lm_analysis_file_to_input_dir():
-    """
-    Saves this month's initial invoice analysis to input folder for use next month
-    """
-    month, _, year = get_date().split("/")
-
-    file_to_copy = f"{month}_{year}_initial_invoice_analysis.xlsx"
-    try:
-        wb = load_workbook(Path.cwd().joinpath("output_files", file_to_copy))
-        wb.save(Path.cwd().joinpath("input_files", f"lm_invoice_analysis.xlsx"))
-        print("This month's invoice analysis saved for next month's processing")
-    except FileNotFoundError:
-        print(
-            f"ERROR: The file {file_to_copy} was not found in the output_files directory"
-        )
-
+    output_path = Path("5_output_files") / f"{month}{year[2:]}_invoice_upload.csv"
+    df.to_csv(output_path, index=False)
 
 if __name__ == "__main__":
     main()
